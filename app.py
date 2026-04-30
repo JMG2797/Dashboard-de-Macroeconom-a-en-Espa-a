@@ -24,9 +24,7 @@ import os
 from functools import lru_cache
 import time
 
-# ═══════════════════════════════════════════════════════════════
 # CONFIGURACIÓN DE PÁGINA
-# ═══════════════════════════════════════════════════════════════
 
 st.set_page_config(
     page_title="Macro Dashboard · Escuela Austriaca",
@@ -35,9 +33,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ═══════════════════════════════════════════════════════════════
 # THEME & CSS
-# ═══════════════════════════════════════════════════════════════
 
 st.markdown("""
 <style>
@@ -241,10 +237,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
-# ═══════════════════════════════════════════════════════════════
 # DATA FETCHING — FRED API
-# ═══════════════════════════════════════════════════════════════
+
+REMOVED_FRED_SERIES = {
+    "GOLDAMGBD228NLBM",
+}
 
 class FREDClient:
     """Cliente ligero para la API de FRED (Federal Reserve Economic Data)."""
@@ -256,6 +253,9 @@ class FREDClient:
     
     def get_series(self, series_id: str, start_date: str = None, limit: int = 60) -> pd.DataFrame:
         """Obtiene datos de una serie FRED."""
+        if series_id in REMOVED_FRED_SERIES:
+            return pd.DataFrame()
+
         if not start_date:
             start_date = (datetime.now() - timedelta(days=365 * 3)).strftime("%Y-%m-%d")
         
@@ -289,10 +289,7 @@ class FREDClient:
             return df["value"].iloc[-1]
         return None
 
-
-# ═══════════════════════════════════════════════════════════════
 # SERIES FRED — Mapeo de indicadores
-# ═══════════════════════════════════════════════════════════════
 
 FRED_SERIES = {
     # Tipos de interés
@@ -347,7 +344,7 @@ FRED_SERIES = {
     
     # Commodities (proxies disponibles en FRED)
     "oil_wti": "DCOILWTICO",         # WTI Crude Oil
-    "gold": "GOLDAMGBD228NLBM",       # Gold London Fix
+    "gold": "GOLDAMGBD228NLBM",       # Gold London Fix (removido en FRED, se usa fallback si falla)
     
     # Crédito
     "consumer_credit": "TOTALSL",     # Total Consumer Credit
@@ -485,6 +482,8 @@ class MacroDataManager:
                 "industrial_hist": "INDPRO",
             }
             for key, series_id in series_to_fetch.items():
+                if series_id in REMOVED_FRED_SERIES:
+                    continue
                 df = self.fred.get_series(series_id, limit=120)
                 if not df.empty:
                     self.history[key] = df
