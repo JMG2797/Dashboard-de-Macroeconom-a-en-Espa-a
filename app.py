@@ -1,9 +1,7 @@
 """
-╔══════════════════════════════════════════════════════════════════╗
-║  MACRO DASHBOARD — ESCUELA AUSTRIACA DE ECONOMÍA                ║
-║  Ciclo Económico, Liquidez & Asset Allocation                   ║
-║  Datos en vivo vía FRED API + fuentes complementarias           ║
-╚══════════════════════════════════════════════════════════════════╝
+ MACRO DASHBOARD — ESCUELA AUSTRIACA DE ECONOMÍA 
+ Ciclo Económico, Liquidez & Asset Allocation 
+ Datos en vivo vía FRED API + fuentes complementarias 
 
 Instrucciones:
   1. Obtén una API key gratuita en https://fred.stlouisfed.org/docs/api/api_key.html
@@ -350,11 +348,7 @@ FRED_SERIES = {
     "consumer_credit": "TOTALSL",     # Total Consumer Credit
     "bank_lending": "TOTLL",          # Bank Lending
 }
-
-
-# ═══════════════════════════════════════════════════════════════
 # DATOS FALLBACK (cuando no hay API key)
-# ═══════════════════════════════════════════════════════════════
 
 FALLBACK_DATA = {
     "fed_funds": 3.625,
@@ -604,10 +598,7 @@ class MacroDataManager:
     def get_history(self, key):
         return self.history.get(key, pd.DataFrame())
 
-
-# ═══════════════════════════════════════════════════════════════
 # CHART BUILDERS
-# ═══════════════════════════════════════════════════════════════
 
 CHART_LAYOUT = dict(
     paper_bgcolor="rgba(0,0,0,0)",
