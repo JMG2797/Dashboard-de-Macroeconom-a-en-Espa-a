@@ -970,17 +970,15 @@ def metric_card_html(label, value, color="#6366f1", detail="", trend=""):
 # MAIN APP
 
 def main():
-    # ─── AUTO-DETECT API KEY ───
-    # Intenta cargar en orden: variable de entorno → archivo local
-    api_key = os.environ.get("FRED_API_KEY", "")
-    if not api_key:
-        api_key = load_api_key_from_file()
+    # ─── LOAD API KEY (siempre desde archivo/env al inicio) ───
+    api_key = os.environ.get("FRED_API_KEY", "") or load_api_key_from_file()
     
-    # Inicializar session_state para persistencia dentro de la sesión
-    if "api_key" not in st.session_state:
-        st.session_state.api_key = api_key
-    else:
-        api_key = st.session_state.api_key
+    # Sincronizar session_state con el archivo
+    if "api_key_state" not in st.session_state:
+        st.session_state.api_key_state = api_key
+    
+    # Si cambió externamente (ej: se borró el archivo), sincronizar
+    api_key = st.session_state.api_key_state
     
     # ─── SIDEBAR ───
     with st.sidebar:
@@ -989,59 +987,72 @@ def main():
         
         # Display current API Key status
         if api_key:
-            st.success("✅ API Key detectada")
-            st.caption(f"📁 Guardada localmente en `~/.config/dashboard_macro/`")
+            st.success("✅ API Key guardada y activa")
+            st.caption(f"📁 Ubicación: `~/.config/dashboard_macro/api_key.txt`")
             
             with st.expander("🔑 Gestionar API Key"):
-                st.markdown("**Cambiar API Key:**")
+                st.markdown("**Cambiar a una nueva API Key:**")
                 new_api_key = st.text_input(
-                    "Ingresa una nueva API Key",
+                    "Nueva API Key",
                     value="",
                     type="password",
-                    help="Obtén tu key gratuita en https://fred.stlouisfed.org/docs/api/api_key.html"
+                    help="Obtén tu key gratuita en https://fred.stlouisfed.org/docs/api/api_key.html",
+                    key="new_api_key_input"
                 )
                 if new_api_key:
-                    api_key = new_api_key
-                    st.session_state.api_key = api_key
-                    if save_api_key_to_file(api_key):
-                        st.success("✅ API Key actualizada y guardada")
+                    if new_api_key != api_key:
+                        api_key = new_api_key
+                        st.session_state.api_key_state = api_key
+                        if save_api_key_to_file(api_key):
+                            st.success("✅ API Key actualizada y guardada")
+                            st.rerun()
+                        else:
+                            st.error("❌ Error al guardar (pero funciona en esta sesión)")
                     else:
-                        st.warning("⚠️ No se pudo guardar en archivo, pero funciona en esta sesión")
+                        st.info("ℹ️ Es la misma key que ya tienes guardada")
                 
                 st.markdown("---")
                 st.markdown("**Eliminar API Key guardada:**")
-                if st.button("🗑️ Borrar API Key local", use_container_width=True):
-                    if delete_api_key_from_file():
-                        st.session_state.api_key = ""
-                        st.success("✅ API Key eliminada")
-                        st.rerun()
-                    else:
-                        st.error("❌ No se pudo eliminar")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("🗑️ Borrar localmente", use_container_width=True):
+                        if delete_api_key_from_file():
+                            st.session_state.api_key_state = ""
+                            st.success("✅ API Key eliminada")
+                            st.rerun()
+                        else:
+                            st.error("❌ No se pudo eliminar")
+                with col2:
+                    if st.button("ℹ️ Mantener en env", use_container_width=True, disabled=True):
+                        pass
         else:
             st.warning("⚠️ No se detectó API Key")
-            st.markdown("**Configura tu API Key:**")
+            st.markdown("**Configura tu FRED API Key:**")
             new_api_key = st.text_input(
                 "Ingresa tu FRED API Key",
                 value="",
                 type="password",
-                help="Obtén tu key gratuita en https://fred.stlouisfed.org/docs/api/api_key.html"
+                help="Obtén tu key gratuita en https://fred.stlouisfed.org/docs/api/api_key.html",
+                key="setup_api_key_input"
             )
             if new_api_key:
                 api_key = new_api_key
-                st.session_state.api_key = api_key
+                st.session_state.api_key_state = api_key
                 
-                # Opción para guardar localmente
+                st.markdown("**¿Guardar esta API Key?**")
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("💾 Guardar localmente", use_container_width=True):
+                    if st.button("💾 Guardar permanentemente", use_container_width=True):
                         if save_api_key_to_file(api_key):
-                            st.success("✅ API Key guardada")
+                            st.success("✅ API Key guardada en archivo")
+                            st.info("ℹ️ Se cargará automáticamente en futuras sesiones")
+                            time.sleep(1)
                             st.rerun()
                         else:
                             st.error("❌ Error al guardar")
                 
-                with col2:
-                    st.button("✓ Solo esta sesión", use_container_width=True, disabled=True)
+                with col1:
+                    st.caption("Se guardará en `~/.config/dashboard_macro/api_key.txt`")
         
         st.markdown("---")
         auto_refresh = st.selectbox("⏱️ Auto-refresh", ["Desactivado", "5 min", "15 min", "30 min", "1 hora"])
@@ -1078,6 +1089,9 @@ def main():
         Escuela Austriaca de Economía.
         </div>
         """, unsafe_allow_html=True)
+    
+    # ─── SINCRONIZAR API KEY DESPUÉS DEL SIDEBAR ───
+    api_key = st.session_state.api_key_state
     
     # ─── INIT DATA MANAGER ───
     fred_client = FREDClient(api_key) if api_key else None
