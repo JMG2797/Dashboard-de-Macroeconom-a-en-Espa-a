@@ -632,7 +632,10 @@ class MacroDataManager:
         return self.data.get(key, default)
     
     def get_history(self, key):
-        return self.history.get(key, pd.DataFrame())
+        df = self.history.get(key, pd.DataFrame())
+        if isinstance(df, pd.DataFrame):
+            return df.copy()
+        return pd.DataFrame()
 
 # CHART BUILDERS
 
@@ -650,17 +653,34 @@ CHART_LAYOUT = dict(
 
 def chart_m2_yoy(mgr: MacroDataManager):
     """Gráfico M2 YoY %."""
-    df = mgr.get_history("m2_yoy")
+    df = mgr.get_history("m2_yoy").copy()
+
     if df.empty:
-        df = pd.DataFrame(FALLBACK_HISTORY["m2_yoy"])
-        x, y = df["date"], df["value"]
+        df = pd.DataFrame(FALLBACK_HISTORY["m2_yoy"]).copy()
+
+    if df.empty or "date" not in df.columns:
+        return None
+
+    # Acepta tanto 'yoy' como 'value'
+    if "yoy" in df.columns:
+        y_col = "yoy"
+    elif "value" in df.columns:
+        y_col = "value"
     else:
-        df = df.tail(36)
-        x, y = df["date"], df["yoy"]
-    
+        return None
+
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df[y_col] = pd.to_numeric(df[y_col], errors="coerce")
+    df = df.dropna(subset=["date", y_col]).sort_values("date").tail(36)
+
+    if df.empty:
+        return None
+
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=x, y=y, mode="lines+markers",
+        x=df["date"],
+        y=df[y_col],
+        mode="lines+markers",
         name="M2 YoY %",
         line=dict(color="#22c55e", width=2.5),
         marker=dict(size=5),
@@ -670,7 +690,10 @@ def chart_m2_yoy(mgr: MacroDataManager):
     fig.add_hline(y=0, line_dash="dash", line_color="rgba(239,68,68,0.4)")
     fig.update_layout(
         **CHART_LAYOUT,
-        title=dict(text="Oferta Monetaria M2 — Crecimiento YoY %", font=dict(size=14, color="#e2e8f0")),
+        title=dict(
+            text="Oferta Monetaria M2 — Crecimiento YoY %",
+            font=dict(size=14, color="#e2e8f0")
+        ),
         yaxis_title="%",
         height=320,
     )
@@ -979,12 +1002,12 @@ def main():
     api_key = env_api_key or saved_api_key
     
     # Inicializar session_state SIEMPRE desde el archivo/env (no lo preserva entre recargas)
-    if "api_key_state" not in st.session_state or not st.session_state.api_key_state:
+    if "api_key_state" not in st.session_state:
+        st.session_state.api_key_state = api_key
+    elif api_key and st.session_state.api_key_state != api_key:
         st.session_state.api_key_state = api_key
     else:
-        # Si session_state tiene valor pero cambió en archivo, sincronizar
         api_key = st.session_state.api_key_state
-    
     # ─── SIDEBAR ───
     with st.sidebar:
         st.markdown("### 🏛️ Configuración")
@@ -1022,11 +1045,12 @@ def main():
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("🗑️ Borrar permanentemente", use_container_width=True):
-                        if delete_api_key_from_file():
-                            st.session_state.api_key_state = ""
-                            api_key = ""
-                            st.success("✅ API Key eliminada")
-                            st.rerun()
+                            if delete_api_key_from_file():
+                                st.session_state.api_key_state = ""
+                                api_key = ""
+                                st.cache_data.clear()
+                                st.success("✅ API Key eliminada")
+                                st.rerun()
                         else:
                             st.error("❌ No se pudo eliminar")
                 with col2:
@@ -1048,12 +1072,13 @@ def main():
                 
                 st.markdown("**Guardar esta API Key:**")
                 if st.button("💾 Guardar permanentemente", use_container_width=True, type="primary"):
-                    if save_api_key_to_file(api_key):
-                        st.success("✅ API Key guardada")
-                        st.info(f"📁 Ubicación: `{get_api_key_path()}`")
-                        st.info("ℹ️ Se cargará automáticamente en futuras sesiones")
-                        time.sleep(1.5)
-                        st.rerun()
+                 if save_api_key_to_file(api_key):
+                    st.success("✅ API Key guardada")
+                    st.info(f"📁 Ubicación: `{get_api_key_path()}`")
+                    st.info("ℹ️ Se cargará automáticamente en futuras sesiones")
+                    st.cache_data.clear()
+                    time.sleep(1.5)
+                    st.rerun()
                     else:
                         st.error("❌ Error al guardar")
         
@@ -1099,13 +1124,13 @@ def main():
     # ─── INIT DATA MANAGER ───
     fred_client = FREDClient(api_key) if api_key else None
     
-    @st.cache_data(ttl=300, show_spinner=False)
-    def load_data(_has_key: bool, _key: str = ""):
-        mgr = MacroDataManager(FREDClient(_key) if _has_key and _key else None)
-        mgr.fetch_all()
-        return mgr
+        @st.cache_data(ttl=300, show_spinner=False)
+        def load_data(has_key: bool, key: str = ""):
+            mgr = MacroDataManager(FREDClient(key) if has_key and key else None)
+            mgr.fetch_all()
+            return mgr
     
-    mgr = load_data(bool(api_key), api_key)
+        mgr = load_data(bool(api_key), api_key)
     
     # ─── AUTO REFRESH ───
     refresh_map = {"5 min": 300, "15 min": 900, "30 min": 1800, "1 hora": 3600}
