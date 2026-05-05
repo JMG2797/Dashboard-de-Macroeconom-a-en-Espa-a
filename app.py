@@ -21,45 +21,6 @@ import json
 import os
 from functools import lru_cache
 import time
-from pathlib import Path
-
-# API KEY PERSISTENCE
-
-def get_api_key_path():
-    """Ruta local para guardar la API Key."""
-    config_dir = Path.home() / ".config" / "dashboard_macro"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    return config_dir / "api_key.txt"
-
-def load_api_key_from_file():
-    """Carga la API Key desde archivo local."""
-    key_file = get_api_key_path()
-    if key_file.exists():
-        try:
-            return key_file.read_text().strip()
-        except Exception:
-            return ""
-    return ""
-
-def save_api_key_to_file(api_key: str):
-    """Guarda la API Key en archivo local."""
-    key_file = get_api_key_path()
-    try:
-        key_file.write_text(api_key)
-        return True
-    except Exception:
-        return False
-
-def delete_api_key_from_file():
-    """Elimina la API Key guardada."""
-    key_file = get_api_key_path()
-    try:
-        if key_file.exists():
-            key_file.unlink()
-        return True
-    except Exception:
-        return False
-
 
 # CONFIGURACIÓN DE PÁGINA
 
@@ -422,24 +383,24 @@ FALLBACK_DATA = {
 # Historical data for charts when API unavailable
 FALLBACK_HISTORY = {
     "m2_yoy": [
-        {"date": "2025-04", "value": 3.8}, {"date": "2025-07", "value": 3.5},
-        {"date": "2025-10", "value": 4.0}, {"date": "2025-12", "value": 4.3},
-        {"date": "2026-01", "value": 4.3}, {"date": "2026-02", "value": 4.9},
-        {"date": "2026-03", "value": 4.6},
+        {"date": "2025-04", "yoy": 3.8}, {"date": "2025-07", "yoy": 3.5},
+        {"date": "2025-10", "yoy": 4.0}, {"date": "2025-12", "yoy": 4.3},
+        {"date": "2026-01", "yoy": 4.3}, {"date": "2026-02", "yoy": 4.9},
+        {"date": "2026-03", "yoy": 4.6},
     ],
-    "cpi": [
-        {"date": "2025-06", "value": 2.0}, {"date": "2025-08", "value": 2.1},
-        {"date": "2025-09", "value": 2.1}, {"date": "2025-10", "value": 2.0},
-        {"date": "2025-11", "value": 2.2}, {"date": "2025-12", "value": 2.3},
-        {"date": "2026-01", "value": 2.4}, {"date": "2026-02", "value": 2.4},
-        {"date": "2026-03", "value": 3.3},
+    "cpi_yoy": [
+        {"date": "2025-06", "yoy": 2.0}, {"date": "2025-08", "yoy": 2.1},
+        {"date": "2025-09", "yoy": 2.1}, {"date": "2025-10", "yoy": 2.0},
+        {"date": "2025-11", "yoy": 2.2}, {"date": "2025-12", "yoy": 2.3},
+        {"date": "2026-01", "yoy": 2.4}, {"date": "2026-02", "yoy": 2.4},
+        {"date": "2026-03", "yoy": 3.3},
     ],
-    "core_cpi": [
-        {"date": "2025-06", "value": 2.2}, {"date": "2025-08", "value": 2.3},
-        {"date": "2025-09", "value": 2.3}, {"date": "2025-10", "value": 2.3},
-        {"date": "2025-11", "value": 2.4}, {"date": "2025-12", "value": 2.4},
-        {"date": "2026-01", "value": 2.5}, {"date": "2026-02", "value": 2.5},
-        {"date": "2026-03", "value": 2.6},
+    "core_cpi_yoy": [
+        {"date": "2025-06", "yoy": 2.2}, {"date": "2025-08", "yoy": 2.3},
+        {"date": "2025-09", "yoy": 2.3}, {"date": "2025-10", "yoy": 2.3},
+        {"date": "2025-11", "yoy": 2.4}, {"date": "2025-12", "yoy": 2.4},
+        {"date": "2026-01", "yoy": 2.5}, {"date": "2026-02", "yoy": 2.5},
+        {"date": "2026-03", "yoy": 2.6},
     ],
     "ism": [
         {"date": "2025-07", "value": 46.5, "prices": 52.0, "orders": 44.8},
@@ -632,10 +593,7 @@ class MacroDataManager:
         return self.data.get(key, default)
     
     def get_history(self, key):
-        df = self.history.get(key, pd.DataFrame())
-        if isinstance(df, pd.DataFrame):
-            return df.copy()
-        return pd.DataFrame()
+        return self.history.get(key, pd.DataFrame())
 
 # CHART BUILDERS
 
@@ -653,34 +611,17 @@ CHART_LAYOUT = dict(
 
 def chart_m2_yoy(mgr: MacroDataManager):
     """Gráfico M2 YoY %."""
-    df = mgr.get_history("m2_yoy").copy()
-
+    df = mgr.get_history("m2_yoy")
     if df.empty:
-        df = pd.DataFrame(FALLBACK_HISTORY["m2_yoy"]).copy()
-
-    if df.empty or "date" not in df.columns:
-        return None
-
-    # Acepta tanto 'yoy' como 'value'
-    if "yoy" in df.columns:
-        y_col = "yoy"
-    elif "value" in df.columns:
-        y_col = "value"
+        df = pd.DataFrame(FALLBACK_HISTORY["m2_yoy"])
+        x, y = df["date"], df["yoy"]
     else:
-        return None
-
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    df[y_col] = pd.to_numeric(df[y_col], errors="coerce")
-    df = df.dropna(subset=["date", y_col]).sort_values("date").tail(36)
-
-    if df.empty:
-        return None
-
+        df = df.tail(36)
+        x, y = df["date"], df["yoy"]
+    
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=df["date"],
-        y=df[y_col],
-        mode="lines+markers",
+        x=x, y=y, mode="lines+markers",
         name="M2 YoY %",
         line=dict(color="#22c55e", width=2.5),
         marker=dict(size=5),
@@ -690,10 +631,7 @@ def chart_m2_yoy(mgr: MacroDataManager):
     fig.add_hline(y=0, line_dash="dash", line_color="rgba(239,68,68,0.4)")
     fig.update_layout(
         **CHART_LAYOUT,
-        title=dict(
-            text="Oferta Monetaria M2 — Crecimiento YoY %",
-            font=dict(size=14, color="#e2e8f0")
-        ),
+        title=dict(text="Oferta Monetaria M2 — Crecimiento YoY %", font=dict(size=14, color="#e2e8f0")),
         yaxis_title="%",
         height=320,
     )
@@ -712,8 +650,8 @@ def chart_cpi(mgr: MacroDataManager):
         fig.add_trace(go.Scatter(x=df_h["date"], y=df_h["yoy"], name="Headline CPI",
                                   line=dict(color="#ef4444", width=2.5), mode="lines+markers", marker=dict(size=4)))
     else:
-        fb = pd.DataFrame(FALLBACK_HISTORY["cpi"])
-        fig.add_trace(go.Scatter(x=fb["date"], y=fb["value"], name="Headline CPI",
+        fb = pd.DataFrame(FALLBACK_HISTORY["cpi_yoy"])
+        fig.add_trace(go.Scatter(x=fb["date"], y=fb["yoy"], name="Headline CPI",
                                   line=dict(color="#ef4444", width=2.5), mode="lines+markers", marker=dict(size=4)))
     
     if not df_c.empty:
@@ -721,8 +659,8 @@ def chart_cpi(mgr: MacroDataManager):
         fig.add_trace(go.Scatter(x=df_c["date"], y=df_c["yoy"], name="Core CPI",
                                   line=dict(color="#3b82f6", width=2, dash="dash"), mode="lines+markers", marker=dict(size=3)))
     else:
-        fb = pd.DataFrame(FALLBACK_HISTORY["core_cpi"])
-        fig.add_trace(go.Scatter(x=fb["date"], y=fb["value"], name="Core CPI",
+        fb = pd.DataFrame(FALLBACK_HISTORY["core_cpi_yoy"])
+        fig.add_trace(go.Scatter(x=fb["date"], y=fb["yoy"], name="Core CPI",
                                   line=dict(color="#3b82f6", width=2, dash="dash"), mode="lines+markers", marker=dict(size=3)))
     
     fig.add_hline(y=2, line_dash="dot", line_color="rgba(34,197,94,0.4)",
@@ -993,92 +931,22 @@ def metric_card_html(label, value, color="#6366f1", detail="", trend=""):
 # MAIN APP
 
 def main():
-    # ─── LOAD API KEY — ARCHIVO ES LA FUENTE DE VERDAD ───
-    # El archivo local es la fuente de verdad, no el session_state
-    saved_api_key = load_api_key_from_file()
-    env_api_key = os.environ.get("FRED_API_KEY", "")
-    
-    # Prioridad: env > archivo guardado
-    api_key = env_api_key or saved_api_key
-    
-    # Inicializar session_state SIEMPRE desde el archivo/env (no lo preserva entre recargas)
-    if "api_key_state" not in st.session_state:
-        st.session_state.api_key_state = api_key
-    elif api_key and st.session_state.api_key_state != api_key:
-        st.session_state.api_key_state = api_key
-    else:
-        api_key = st.session_state.api_key_state
     # ─── SIDEBAR ───
     with st.sidebar:
         st.markdown("### 🏛️ Configuración")
         st.markdown("---")
         
-        # Mostrar estado de la API Key
+        api_key = st.text_input(
+            "🔑 FRED API Key",
+            value=os.environ.get("FRED_API_KEY", ""),
+            type="password",
+            help="Obtén tu key gratuita en https://fred.stlouisfed.org/docs/api/api_key.html"
+        )
+        
         if api_key:
-            st.success("✅ API Key cargada permanentemente")
-            st.caption("📁 Guardada en: `~/.config/dashboard_macro/api_key.txt`")
-            
-            with st.expander("🔑 Gestionar API Key"):
-                st.markdown("**Cambiar a una nueva API Key:**")
-                new_api_key = st.text_input(
-                    "Nueva API Key",
-                    value="",
-                    type="password",
-                    help="Obtén tu key gratuita en https://fred.stlouisfed.org/docs/api/api_key.html",
-                    key="new_api_key_input"
-                )
-                if new_api_key and new_api_key != api_key:
-                    api_key = new_api_key
-                    st.session_state.api_key_state = api_key
-                    if save_api_key_to_file(api_key):
-                        st.success("✅ API Key actualizada y guardada permanentemente")
-                        st.info("ℹ️ Cargará automáticamente en futuras sesiones")
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.error("❌ Error al guardar (pero funciona en esta sesión)")
-                elif new_api_key and new_api_key == api_key:
-                    st.info("ℹ️ Es la misma key que ya tienes guardada")
-                
-                st.markdown("---")
-                st.markdown("**Eliminar API Key guardada:**")
-                col1, col2 = st.columns(2)
-                with col1:
-                    # ─── SINCRONIZAR API KEY ───
-                    if "api_key_state" not in st.session_state:
-                        st.session_state.api_key_state = api_key
-                    elif api_key and st.session_state.api_key_state != api_key:
-                        st.session_state.api_key_state = api_key
-                    else:
-                        api_key = st.session_state.api_key_state
-                with col2:
-                    if st.button("ℹ️ Ver ubicación", use_container_width=True):
-                        st.info(f"📂 {get_api_key_path()}")
+            st.success("✅ API Key configurada")
         else:
-            st.warning("⚠️ Sin API Key — usando datos estáticos")
-            st.markdown("**Configura tu FRED API Key:**")
-            new_api_key = st.text_input(
-                "Ingresa tu FRED API Key",
-                value="",
-                type="password",
-                help="Obtén tu key gratuita en https://fred.stlouisfed.org/docs/api/api_key.html",
-                key="setup_api_key_input"
-            )
-            if new_api_key:
-                api_key = new_api_key
-                st.session_state.api_key_state = api_key
-                
-                st.markdown("**Guardar esta API Key:**")
-                if st.button("💾 Guardar permanentemente", use_container_width=True, type="primary"):
-                    if save_api_key_to_file(api_key):
-                        st.success("✅ API Key guardada")
-                        st.info(f"📁 Ubicación: `{get_api_key_path()}`")
-                        st.info("ℹ️ Se cargará automáticamente en futuras sesiones")
-                        st.cache_data.clear()
-                        time.sleep(1.5)
-                        st.rerun()
-                    else:
-                        st.error("❌ Error al guardar")
+            st.info("ℹ️ Sin API key se usarán datos estáticos (Abr 2026). Configura tu key para datos en vivo.")
         
         st.markdown("---")
         auto_refresh = st.selectbox("⏱️ Auto-refresh", ["Desactivado", "5 min", "15 min", "30 min", "1 hora"])
@@ -1116,19 +984,16 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
-    # ─── SINCRONIZAR API KEY (después del sidebar) ───
-    api_key = st.session_state.api_key_state
-    
     # ─── INIT DATA MANAGER ───
     fred_client = FREDClient(api_key) if api_key else None
     
-        @st.cache_data(ttl=300, show_spinner=False)
-        def load_data(has_key: bool, key: str = ""):
-            mgr = MacroDataManager(FREDClient(key) if has_key and key else None)
-            mgr.fetch_all()
-            return mgr
+    @st.cache_data(ttl=300, show_spinner=False)
+    def load_data(_has_key: bool, _key: str = ""):
+        mgr = MacroDataManager(FREDClient(_key) if _has_key and _key else None)
+        mgr.fetch_all()
+        return mgr
     
-        mgr = load_data(bool(api_key), api_key)
+    mgr = load_data(bool(api_key), api_key)
     
     # ─── AUTO REFRESH ───
     refresh_map = {"5 min": 300, "15 min": 900, "30 min": 1800, "1 hora": 3600}
