@@ -1070,13 +1070,13 @@ def main():
                 
                 st.markdown("**Guardar esta API Key:**")
                 if st.button("💾 Guardar permanentemente", use_container_width=True, type="primary"):
-                 if save_api_key_to_file(api_key):
-                    st.success("✅ API Key guardada")
-                    st.info(f"📁 Ubicación: `{get_api_key_path()}`")
-                    st.info("ℹ️ Se cargará automáticamente en futuras sesiones")
-                    st.cache_data.clear()
-                    time.sleep(1.5)
-                    st.rerun()
+                    if save_api_key_to_file(api_key):
+                        st.success("✅ API Key guardada")
+                        st.info(f"📁 Ubicación: `{get_api_key_path()}`")
+                        st.info("ℹ️ Se cargará automáticamente en futuras sesiones")
+                        st.cache_data.clear()
+                        time.sleep(1.5)
+                        st.rerun()
                     else:
                         st.error("❌ Error al guardar")
         
