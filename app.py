@@ -427,10 +427,7 @@ FALLBACK_HISTORY = {
     ],
 }
 
-
-# ═══════════════════════════════════════════════════════════════
 # DATA MANAGER — Orquesta la obtención de datos
-# ═══════════════════════════════════════════════════════════════
 
 class MacroDataManager:
     def __init__(self, fred_client: FREDClient | None = None):
@@ -917,10 +914,7 @@ def chart_allocation():
     )
     return fig
 
-
-# ═══════════════════════════════════════════════════════════════
 # HELPER — Metric card HTML
-# ═══════════════════════════════════════════════════════════════
 
 def metric_card_html(label, value, color="#6366f1", detail="", trend=""):
     trend_class = "trend-up" if trend == "up" else "trend-down" if trend == "down" else "trend-flat"
@@ -934,28 +928,40 @@ def metric_card_html(label, value, color="#6366f1", detail="", trend=""):
     </div>
     """
 
-
-# ═══════════════════════════════════════════════════════════════
 # MAIN APP
-# ═══════════════════════════════════════════════════════════════
 
 def main():
+    # ─── AUTO-DETECT API KEY ───
+    api_key = os.environ.get("FRED_API_KEY", "")
+    
     # ─── SIDEBAR ───
     with st.sidebar:
         st.markdown("### 🏛️ Configuración")
         st.markdown("---")
         
-        api_key = st.text_input(
-            "🔑 FRED API Key",
-            value=os.environ.get("FRED_API_KEY", ""),
-            type="password",
-            help="Obtén tu key gratuita en https://fred.stlouisfed.org/docs/api/api_key.html"
-        )
-        
+        # Display current API Key status
         if api_key:
-            st.success("✅ API Key configurada")
+            st.success("✅ API Key detectada automáticamente")
+            with st.expander("🔑 Cambiar API Key"):
+                new_api_key = st.text_input(
+                    "Ingresa una nueva API Key",
+                    value="",
+                    type="password",
+                    help="Obtén tu key gratuita en https://fred.stlouisfed.org/docs/api/api_key.html"
+                )
+                if new_api_key:
+                    api_key = new_api_key
+                    st.success("✅ API Key actualizada para esta sesión")
         else:
-            st.info("ℹ️ Sin API key se usarán datos estáticos (Abr 2026). Configura tu key para datos en vivo.")
+            st.warning("⚠️ No se detectó API Key")
+            api_key = st.text_input(
+                "🔑 Configura tu FRED API Key",
+                value="",
+                type="password",
+                help="Obtén tu key gratuita en https://fred.stlouisfed.org/docs/api/api_key.html"
+            )
+            if api_key:
+                st.info("ℹ️ API Key configurada para esta sesión. Para persistencia, establece FRED_API_KEY en variables de entorno.")
         
         st.markdown("---")
         auto_refresh = st.selectbox("⏱️ Auto-refresh", ["Desactivado", "5 min", "15 min", "30 min", "1 hora"])
@@ -1023,9 +1029,7 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    # ═══════════════════════════════════════════════════════════
     # TABS
-    # ═══════════════════════════════════════════════════════════
     
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "◉ Panel General",
@@ -1035,9 +1039,7 @@ def main():
         "◐ Asset Allocation",
     ])
     
-    # ─────────────────────────────────────────────────────────
     # TAB 1: PANEL GENERAL
-    # ─────────────────────────────────────────────────────────
     with tab1:
         # Regime badge
         regime = mgr.get("regime", "Transición")
@@ -1101,9 +1103,7 @@ def main():
             baa = mgr.get("baa_spread", 2.10)
             st.markdown(metric_card_html("Baa Spread", f"{baa:.2f}%", "#8b5cf6", "Riesgo crédito corp.", "up"), unsafe_allow_html=True)
     
-    # ─────────────────────────────────────────────────────────
     # TAB 2: LIQUIDEZ & CRÉDITO
-    # ─────────────────────────────────────────────────────────
     with tab2:
         col1, col2 = st.columns(2)
         with col1:
@@ -1142,9 +1142,7 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
-    # ─────────────────────────────────────────────────────────
     # TAB 3: PRECIOS & INFLACIÓN
-    # ─────────────────────────────────────────────────────────
     with tab3:
         st.plotly_chart(chart_cpi(mgr), use_container_width=True)
         
@@ -1174,9 +1172,7 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
-    # ─────────────────────────────────────────────────────────
     # TAB 4: CICLO AUSTRIACO
-    # ─────────────────────────────────────────────────────────
     with tab4:
         scores = mgr.get("cycle_scores", {})
         phase_colors = {"Expansión Crediticia": "#22c55e", "Malinversión": "#f59e0b",
@@ -1233,9 +1229,7 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
-    # ─────────────────────────────────────────────────────────
     # TAB 5: ASSET ALLOCATION
-    # ─────────────────────────────────────────────────────────
     with tab5:
         st.markdown(f"""
         <div class="regime-badge">
@@ -1329,7 +1323,7 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
-    # ─── FOOTER ───
+    # FOOTER
     st.markdown("""
     <div class="disclaimer">
         ⚠️ Esto no constituye asesoramiento financiero. Análisis basado en principios teóricos 
