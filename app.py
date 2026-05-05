@@ -970,25 +970,30 @@ def metric_card_html(label, value, color="#6366f1", detail="", trend=""):
 # MAIN APP
 
 def main():
-    # ─── LOAD API KEY (siempre desde archivo/env al inicio) ───
-    api_key = os.environ.get("FRED_API_KEY", "") or load_api_key_from_file()
+    # ─── LOAD API KEY — ARCHIVO ES LA FUENTE DE VERDAD ───
+    # El archivo local es la fuente de verdad, no el session_state
+    saved_api_key = load_api_key_from_file()
+    env_api_key = os.environ.get("FRED_API_KEY", "")
     
-    # Sincronizar session_state con el archivo
-    if "api_key_state" not in st.session_state:
+    # Prioridad: env > archivo guardado
+    api_key = env_api_key or saved_api_key
+    
+    # Inicializar session_state SIEMPRE desde el archivo/env (no lo preserva entre recargas)
+    if "api_key_state" not in st.session_state or not st.session_state.api_key_state:
         st.session_state.api_key_state = api_key
-    
-    # Si cambió externamente (ej: se borró el archivo), sincronizar
-    api_key = st.session_state.api_key_state
+    else:
+        # Si session_state tiene valor pero cambió en archivo, sincronizar
+        api_key = st.session_state.api_key_state
     
     # ─── SIDEBAR ───
     with st.sidebar:
         st.markdown("### 🏛️ Configuración")
         st.markdown("---")
         
-        # Display current API Key status
+        # Mostrar estado de la API Key
         if api_key:
-            st.success("✅ API Key guardada y activa")
-            st.caption(f"📁 Ubicación: `~/.config/dashboard_macro/api_key.txt`")
+            st.success("✅ API Key cargada permanentemente")
+            st.caption("📁 Guardada en: `~/.config/dashboard_macro/api_key.txt`")
             
             with st.expander("🔑 Gestionar API Key"):
                 st.markdown("**Cambiar a una nueva API Key:**")
@@ -999,34 +1004,36 @@ def main():
                     help="Obtén tu key gratuita en https://fred.stlouisfed.org/docs/api/api_key.html",
                     key="new_api_key_input"
                 )
-                if new_api_key:
-                    if new_api_key != api_key:
-                        api_key = new_api_key
-                        st.session_state.api_key_state = api_key
-                        if save_api_key_to_file(api_key):
-                            st.success("✅ API Key actualizada y guardada")
-                            st.rerun()
-                        else:
-                            st.error("❌ Error al guardar (pero funciona en esta sesión)")
+                if new_api_key and new_api_key != api_key:
+                    api_key = new_api_key
+                    st.session_state.api_key_state = api_key
+                    if save_api_key_to_file(api_key):
+                        st.success("✅ API Key actualizada y guardada permanentemente")
+                        st.info("ℹ️ Cargará automáticamente en futuras sesiones")
+                        time.sleep(1)
+                        st.rerun()
                     else:
-                        st.info("ℹ️ Es la misma key que ya tienes guardada")
+                        st.error("❌ Error al guardar (pero funciona en esta sesión)")
+                elif new_api_key and new_api_key == api_key:
+                    st.info("ℹ️ Es la misma key que ya tienes guardada")
                 
                 st.markdown("---")
                 st.markdown("**Eliminar API Key guardada:**")
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("🗑️ Borrar localmente", use_container_width=True):
+                    if st.button("🗑️ Borrar permanentemente", use_container_width=True):
                         if delete_api_key_from_file():
                             st.session_state.api_key_state = ""
+                            api_key = ""
                             st.success("✅ API Key eliminada")
                             st.rerun()
                         else:
                             st.error("❌ No se pudo eliminar")
                 with col2:
-                    if st.button("ℹ️ Mantener en env", use_container_width=True, disabled=True):
-                        pass
+                    if st.button("ℹ️ Ver ubicación", use_container_width=True):
+                        st.info(f"📂 {get_api_key_path()}")
         else:
-            st.warning("⚠️ No se detectó API Key")
+            st.warning("⚠️ Sin API Key — usando datos estáticos")
             st.markdown("**Configura tu FRED API Key:**")
             new_api_key = st.text_input(
                 "Ingresa tu FRED API Key",
@@ -1039,20 +1046,16 @@ def main():
                 api_key = new_api_key
                 st.session_state.api_key_state = api_key
                 
-                st.markdown("**¿Guardar esta API Key?**")
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("💾 Guardar permanentemente", use_container_width=True):
-                        if save_api_key_to_file(api_key):
-                            st.success("✅ API Key guardada en archivo")
-                            st.info("ℹ️ Se cargará automáticamente en futuras sesiones")
-                            time.sleep(1)
-                            st.rerun()
-                        else:
-                            st.error("❌ Error al guardar")
-                
-                with col1:
-                    st.caption("Se guardará en `~/.config/dashboard_macro/api_key.txt`")
+                st.markdown("**Guardar esta API Key:**")
+                if st.button("💾 Guardar permanentemente", use_container_width=True, type="primary"):
+                    if save_api_key_to_file(api_key):
+                        st.success("✅ API Key guardada")
+                        st.info(f"📁 Ubicación: `{get_api_key_path()}`")
+                        st.info("ℹ️ Se cargará automáticamente en futuras sesiones")
+                        time.sleep(1.5)
+                        st.rerun()
+                    else:
+                        st.error("❌ Error al guardar")
         
         st.markdown("---")
         auto_refresh = st.selectbox("⏱️ Auto-refresh", ["Desactivado", "5 min", "15 min", "30 min", "1 hora"])
@@ -1090,7 +1093,7 @@ def main():
         </div>
         """, unsafe_allow_html=True)
     
-    # ─── SINCRONIZAR API KEY DESPUÉS DEL SIDEBAR ───
+    # ─── SINCRONIZAR API KEY (después del sidebar) ───
     api_key = st.session_state.api_key_state
     
     # ─── INIT DATA MANAGER ───
