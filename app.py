@@ -1044,15 +1044,13 @@ def main():
                 st.markdown("**Eliminar API Key guardada:**")
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("🗑️ Borrar permanentemente", use_container_width=True):
-                            if delete_api_key_from_file():
-                                st.session_state.api_key_state = ""
-                                api_key = ""
-                                st.cache_data.clear()
-                                st.success("✅ API Key eliminada")
-                                st.rerun()
-                        else:
-                            st.error("❌ No se pudo eliminar")
+                    # ─── SINCRONIZAR API KEY ───
+                    if "api_key_state" not in st.session_state:
+                        st.session_state.api_key_state = api_key
+                    elif api_key and st.session_state.api_key_state != api_key:
+                        st.session_state.api_key_state = api_key
+                    else:
+                        api_key = st.session_state.api_key_state
                 with col2:
                     if st.button("ℹ️ Ver ubicación", use_container_width=True):
                         st.info(f"📂 {get_api_key_path()}")
